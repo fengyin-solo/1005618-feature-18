@@ -24,6 +24,18 @@
       </span>
     </p>
 
+    <section class="review-panel">
+      <h3>口径重算待确认清单（{{ reviewTickets.length }}）</h3>
+      <ul v-if="reviewTickets.length">
+        <li v-for="ticket in reviewTickets" :key="String(ticket.id)">
+          <strong>{{ ticket['服务单号'] }}</strong>
+          · {{ ticket['报修用户'] }} — {{ ticket['服务内容'] }}
+          <span v-if="ticket.abnormal" class="warn-tag">转人工复核</span>
+        </li>
+      </ul>
+      <p v-else class="review-empty">暂无热费口径重算待确认工单</p>
+    </section>
+
     <form class="filter-bar" @submit.prevent="reload">
       <label v-for="field in filterFields" :key="field" class="filter-item">
         <span>{{ field }}</span>
@@ -77,6 +89,7 @@ import {
   downloadEntries,
   listEntries,
   moduleMeta,
+  RECALC_TICKET_PREFIX,
   runAction as applyAction,
 } from '@/api/local-service'
 import type { EntryRow } from '@/data/types'
@@ -92,6 +105,8 @@ const total = ref(0)
 const errorMessage = ref('')
 const filters = ref<Record<string, string>>({})
 const filterFields = columns.slice(0, 3)
+// 待确认清单读全量台账，不受上面筛选条件影响。
+const reviewTickets = ref<EntryRow[]>([])
 const statusSummary = computed(() =>
   statuses.map((status: string) => ({
     status,
@@ -128,6 +143,11 @@ function reload() {
     const payload = listEntries(meta.key, filters.value)
     rows.value = payload.items
     total.value = payload.total
+    reviewTickets.value = listEntries(meta.key).items.filter(
+      (row) =>
+        String(row['服务单号'] ?? '').startsWith(RECALC_TICKET_PREFIX) &&
+        String(row.status) === '待受理',
+    )
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '入户服务列表读取失败'
   }
