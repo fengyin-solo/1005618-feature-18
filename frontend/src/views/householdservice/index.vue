@@ -67,6 +67,56 @@
       <span>共 {{ total }} 条入户服务记录</span>
       <span v-if="errorMessage" class="error-text">{{ errorMessage }}</span>
     </footer>
+
+    <section class="ledger-block">
+      <header class="page-head">
+        <div>
+          <h3>客服台账 · 待确认清单</h3>
+          <p class="page-desc">热价调整重算、提交核算与办理减免的结果按结算单落到这里（重复提交只保留一条）；应缴金额与热费结算页同一口径实时复算。</p>
+        </div>
+        <div class="page-actions">
+          <button class="btn" type="button" @click="reloadQueue">刷新清单</button>
+        </div>
+      </header>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>结算编号</th>
+            <th>用户名称</th>
+            <th>用热面积（㎡）</th>
+            <th>热价标准</th>
+            <th>应缴金额（元）</th>
+            <th>减免金额（元）</th>
+            <th>复核原因</th>
+            <th>来源</th>
+            <th>登记时间</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="item in queue" :key="item.billingId">
+            <td>{{ item.结算编号 }}</td>
+            <td>{{ item.用户名称 }}</td>
+            <td>{{ item.用热面积 }}</td>
+            <td>{{ item.热价标准 }}</td>
+            <td>{{ queueReceivable(item) }}</td>
+            <td>{{ item.减免金额 === null ? '—' : item.减免金额.toFixed(2) }}</td>
+            <td>{{ item.复核原因 || '—' }}</td>
+            <td>{{ item.来源 }}</td>
+            <td>{{ item.登记时间 }}</td>
+            <td class="row-actions">
+              <button class="link" type="button" @click="confirmQueue(item.billingId)">确认</button>
+            </td>
+          </tr>
+          <tr v-if="!queue.length">
+            <td colspan="10" class="empty-state">待确认清单为空，热费侧重算或核算后会自动落入这里</td>
+          </tr>
+        </tbody>
+      </table>
+      <footer class="page-foot">
+        <span>待确认 {{ queue.length }} 条</span>
+      </footer>
+    </section>
   </section>
 </template>
 
@@ -79,7 +129,10 @@ import {
   moduleMeta,
   runAction as applyAction,
 } from '@/api/local-service'
-import type { EntryRow } from '@/data/types'
+import { liveReceivable } from '@/api/billing-service'
+import { listPendingConfirm, removePendingConfirm } from '@/data/pending-queue'
+import { formatMoney } from '@/data/pricing'
+import type { EntryRow, PendingConfirmItem } from '@/data/types'
 
 const meta = moduleMeta('householdservice')
 const columns = ["服务单号", "报修用户", "服务内容", "受理人", "上门时间", "处理结果", "回访日期", "服务状态"]
@@ -92,6 +145,7 @@ const total = ref(0)
 const errorMessage = ref('')
 const filters = ref<Record<string, string>>({})
 const filterFields = columns.slice(0, 3)
+const queue = ref<PendingConfirmItem[]>([])
 const statusSummary = computed(() =>
   statuses.map((status: string) => ({
     status,
@@ -133,5 +187,21 @@ function reload() {
   }
 }
 
-onMounted(reload)
+// 待确认清单的应缴金额走结算口径实时复算，保证两处读到的金额一致
+function queueReceivable(item: PendingConfirmItem): string {
+  return formatMoney(liveReceivable(item))
+}
+
+function reloadQueue() {
+  queue.value = listPendingConfirm()
+}
+
+function confirmQueue(billingId: number) {
+  queue.value = removePendingConfirm(billingId)
+}
+
+onMounted(() => {
+  reload()
+  reloadQueue()
+})
 </script>
